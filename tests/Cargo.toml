@@ -5,7 +5,7 @@ edition = "2021"
 publish = false
 
 [dependencies]
-cyber-agent-model = { path = "../crates/model" }
+cyber-agent-proto = { path = "../crates/proto" }
 cyber-agent-tool = { path = "../crates/tool" }
 cyber-agent-transport = { path = "../crates/transport" }
 cyber-agent-protocol = { path = "../crates/protocol" }

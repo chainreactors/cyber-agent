@@ -4,9 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-cyber-agent-model = { path = "../model" }
-cyber-agent-tool = { path = "../tool" }
 cyber-agent-proto = { path = "../proto" }
+cyber-agent-tool = { path = "../tool" }
 async-trait = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }

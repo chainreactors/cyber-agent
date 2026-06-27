@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::Result;
 use async_trait::async_trait;
 
-use cyber_agent_model::{LlmProvider, UserContent};
+use cyber_agent_proto::LlmProvider;
 use cyber_agent_protocol::{
     BridgeAssistantMessage, BridgeChoice, BridgeCompletionPayload, BridgeRequest, BridgeResponse,
     BridgeResponsePayload, BridgeToolCall, BridgeToolCallFunction, BridgeUsage,
@@ -257,9 +257,7 @@ async fn full_stack_multi_tool_agent_loop() {
         provider,
         &tools,
         "You are a helpful assistant with shell and directory listing tools.",
-        &UserContent::Text(
-            "What is the hostname of this machine? Also list the current directory.".into(),
-        ),
+        "What is the hostname of this machine? Also list the current directory.",
         Some(&on_event),
         None,
     )
@@ -451,7 +449,7 @@ async fn tool_error_is_forwarded_to_llm() {
         provider,
         &tools,
         "system",
-        &UserContent::Text("test".into()),
+        "test",
         None,
         None,
     )
@@ -467,7 +465,7 @@ async fn tool_error_is_forwarded_to_llm() {
 /// Test: conversation history is correctly forwarded through the bridge
 #[tokio::test]
 async fn history_is_forwarded() {
-    use cyber_agent_model::ChatMessage;
+    use cyber_agent_proto::ChatMessage;
 
     struct HistoryCheckBackend;
 
@@ -523,7 +521,7 @@ async fn history_is_forwarded() {
         provider,
         &ToolRegistry::new(),
         "system prompt",
-        &UserContent::Text("follow-up question".into()),
+        "follow-up question",
         None,
         Some(history),
     )

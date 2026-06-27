@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use async_trait::async_trait;
 
-use cyber_agent_model::{LlmProvider, UserContent};
+use cyber_agent_proto::LlmProvider;
 use cyber_agent_provider::BridgeProvider;
 use cyber_agent_runner::{run_agent_loop, RunnerEvent};
 use cyber_agent_tool::{AgentTool, ToolRegistry};
@@ -217,7 +217,7 @@ async fn e2e_simple_completion() {
         provider,
         &ToolRegistry::new(),
         "You are a helpful assistant. Be very brief.",
-        &UserContent::Text("Say 'cyber_agent_ok' and nothing else.".into()),
+        "Say 'cyber_agent_ok' and nothing else.",
         None,
         None,
     )
@@ -276,9 +276,7 @@ async fn e2e_tool_call() {
         provider,
         &tools,
         "You are a helpful assistant. Use the shell tool when asked to run commands. Be brief.",
-        &UserContent::Text(
-            "Run the command 'echo hello_from_cyber_agent' and tell me what it outputs.".into(),
-        ),
+        "Run the command 'echo hello_from_cyber_agent' and tell me what it outputs.",
         Some(&on_event),
         None,
     )
@@ -333,9 +331,7 @@ async fn e2e_multi_tool() {
         provider,
         &tools,
         "You are a system assistant with shell and list_directory tools. Use the appropriate tool for each task. Be concise.",
-        &UserContent::Text(
-            "Use the list_directory tool to list files in /tmp, then use shell to show the current date.".into(),
-        ),
+        "Use the list_directory tool to list files in /tmp, then use shell to show the current date.",
         None,
         None,
     )

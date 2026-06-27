@@ -15,7 +15,7 @@ use std::thread;
 use anyhow::Result;
 use async_trait::async_trait;
 
-use cyber_agent_model::{LlmProvider, UserContent};
+use cyber_agent_proto::LlmProvider;
 use cyber_agent_provider::BridgeProvider;
 use cyber_agent_runner::{run_agent_loop, RunnerEvent};
 use cyber_agent_tool::{AgentTool, ToolRegistry};
@@ -264,7 +264,7 @@ async fn e2e_over_http_with_tool_call() {
         provider,
         &tools,
         "You are a test assistant.",
-        &UserContent::Text("Run echo hello_from_server".into()),
+        "Run echo hello_from_server",
         Some(&on_event),
         None,
     )

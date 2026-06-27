@@ -3,10 +3,7 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 
-use cyber_agent_model::{
-    ChatMessage, CompletionResponse, LlmProvider, Usage, UserContent,
-};
-use cyber_agent_proto::ToolDef;
+use cyber_agent_proto::{ChatMessage, CompletionResponse, LlmProvider, ToolDef, Usage};
 use cyber_agent_tool::ToolRegistry;
 
 const DEFAULT_MAX_ITERATIONS: usize = 25;
@@ -254,7 +251,7 @@ pub async fn run_agent_loop(
     provider: Arc<dyn LlmProvider>,
     tools: &ToolRegistry,
     system_prompt: &str,
-    user_content: &UserContent,
+    user_text: &str,
     on_event: Option<&OnEvent>,
     history: Option<Vec<ChatMessage>>,
 ) -> Result<AgentRunResult, AgentRunError> {
@@ -269,9 +266,7 @@ pub async fn run_agent_loop(
     if let Some(hist) = history {
         messages.extend(hist);
     }
-    messages.push(ChatMessage::User {
-        content: user_content.clone(),
-    });
+    messages.push(ChatMessage::user(user_text));
 
     let mut iterations = 0usize;
     let mut total_tool_calls = 0usize;
@@ -315,12 +310,13 @@ pub async fn run_agent_loop(
             }
         };
 
-        total_input_tokens = total_input_tokens.saturating_add(response.usage.input_tokens);
-        total_output_tokens = total_output_tokens.saturating_add(response.usage.output_tokens);
+        let usage = response.usage.unwrap_or_default();
+        total_input_tokens = total_input_tokens.saturating_add(usage.input_tokens);
+        total_output_tokens = total_output_tokens.saturating_add(usage.output_tokens);
 
         if response.tool_calls.is_empty() {
             return Ok(AgentRunResult {
-                text: response.text.unwrap_or_default(),
+                text: response.text.clone(),
                 iterations,
                 tool_calls_made: total_tool_calls,
                 usage: Usage {
@@ -332,7 +328,7 @@ pub async fn run_agent_loop(
         }
 
         messages.push(ChatMessage::assistant_with_tools(
-            response.text.clone(),
+            if response.text.is_empty() { None } else { Some(response.text.clone()) },
             response.tool_calls.clone(),
         ));
 
@@ -343,7 +339,7 @@ pub async fn run_agent_loop(
                 cb(RunnerEvent::ToolCallStart {
                     id: tc.id.clone(),
                     name: tc.name.clone(),
-                    arguments: tc.arguments.clone(),
+                    arguments: tc.arguments(),
                 });
             }
         }
@@ -353,7 +349,7 @@ pub async fn run_agent_loop(
             .iter()
             .map(|tc| {
                 let tool = tools.get(&tc.name);
-                let args = tc.arguments.clone();
+                let args = tc.arguments();
                 let tc_name = tc.name.clone();
                 async move {
                     if let Some(tool) = tool {
@@ -419,7 +415,7 @@ pub async fn run_agent_loop(
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use cyber_agent_model::{ToolCall, ToolDef};
+    use cyber_agent_proto::{ToolCall, ToolDef};
     use cyber_agent_tool::AgentTool;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -441,12 +437,9 @@ mod tests {
             _tools: &[ToolDef],
         ) -> anyhow::Result<CompletionResponse> {
             Ok(CompletionResponse {
-                text: Some(self.response_text.clone()),
+                text: self.response_text.clone(),
                 tool_calls: vec![],
-                usage: Usage {
-                    input_tokens: 10,
-                    output_tokens: 5,
-                },
+                usage: Some(Usage { input_tokens: 10, output_tokens: 5 }),
             })
         }
     }
@@ -457,15 +450,9 @@ mod tests {
 
     #[async_trait]
     impl LlmProvider for ToolCallingProvider {
-        fn name(&self) -> &str {
-            "mock"
-        }
-        fn id(&self) -> &str {
-            "mock-model"
-        }
-        fn supports_tools(&self) -> bool {
-            true
-        }
+        fn name(&self) -> &str { "mock" }
+        fn id(&self) -> &str { "mock-model" }
+        fn supports_tools(&self) -> bool { true }
         async fn complete(
             &self,
             _messages: &[ChatMessage],
@@ -474,25 +461,15 @@ mod tests {
             let count = self.call_count.fetch_add(1, Ordering::SeqCst);
             if count == 0 {
                 Ok(CompletionResponse {
-                    text: None,
-                    tool_calls: vec![ToolCall {
-                        id: "call_1".into(),
-                        name: "echo_tool".into(),
-                        arguments: serde_json::json!({"text": "hi"}),
-                    }],
-                    usage: Usage {
-                        input_tokens: 10,
-                        output_tokens: 5,
-                    },
+                    text: String::new(),
+                    tool_calls: vec![ToolCall::new("call_1", "echo_tool", serde_json::json!({"text": "hi"}))],
+                    usage: Some(Usage { input_tokens: 10, output_tokens: 5 }),
                 })
             } else {
                 Ok(CompletionResponse {
-                    text: Some("Done!".into()),
+                    text: "Done!".into(),
                     tool_calls: vec![],
-                    usage: Usage {
-                        input_tokens: 20,
-                        output_tokens: 10,
-                    },
+                    usage: Some(Usage { input_tokens: 20, output_tokens: 10 }),
                 })
             }
         }
@@ -502,19 +479,12 @@ mod tests {
 
     #[async_trait]
     impl AgentTool for EchoTool {
-        fn name(&self) -> &str {
-            "echo_tool"
-        }
-        fn description(&self) -> &str {
-            "Echoes input"
-        }
+        fn name(&self) -> &str { "echo_tool" }
+        fn description(&self) -> &str { "Echoes input" }
         fn parameters_schema(&self) -> serde_json::Value {
             serde_json::json!({"type": "object", "properties": {"text": {"type": "string"}}})
         }
-        async fn execute(
-            &self,
-            params: serde_json::Value,
-        ) -> anyhow::Result<serde_json::Value> {
+        async fn execute(&self, params: serde_json::Value) -> anyhow::Result<serde_json::Value> {
             Ok(params)
         }
     }
@@ -525,9 +495,8 @@ mod tests {
             response_text: "Hello!".into(),
         });
         let tools = ToolRegistry::new();
-        let user = UserContent::Text("hi".into());
 
-        let result = run_agent_loop(provider, &tools, "system", &user, None, None)
+        let result = run_agent_loop(provider, &tools, "system", "hi", None, None)
             .await
             .unwrap();
 
@@ -543,9 +512,8 @@ mod tests {
         });
         let mut tools = ToolRegistry::new();
         tools.register(Box::new(EchoTool));
-        let user = UserContent::Text("test".into());
 
-        let result = run_agent_loop(provider, &tools, "system", &user, None, None)
+        let result = run_agent_loop(provider, &tools, "system", "test", None, None)
             .await
             .unwrap();
 

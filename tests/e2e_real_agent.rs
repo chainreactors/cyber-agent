@@ -6,7 +6,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use async_trait::async_trait;
 
-use cyber_agent_model::{LlmProvider, UserContent};
+use cyber_agent_proto::LlmProvider;
 use cyber_agent_provider::BridgeProvider;
 use cyber_agent_runner::{run_agent_loop, RunnerEvent};
 use cyber_agent_tool::{AgentTool, ToolRegistry};
@@ -194,9 +194,7 @@ async fn real_agent_sysinfo() {
     let result = run_agent_loop(
         provider, &tools,
         "You are a system recon assistant on Linux. Use shell and read_file tools. Be efficient, batch commands. Give a structured report.",
-        &UserContent::Text(
-            "Gather and report:\n1. hostname and user (hostname && whoami)\n2. kernel (uname -r)\n3. OS (cat /etc/os-release | head -4)\n4. uptime".into(),
-        ),
+        "Gather and report:\n1. hostname and user (hostname && whoami)\n2. kernel (uname -r)\n3. OS (cat /etc/os-release | head -4)\n4. uptime",
         Some(&cb), None,
     ).await.expect("agent should succeed");
 
@@ -231,13 +229,11 @@ async fn real_agent_file_task() {
     let result = run_agent_loop(
         provider, &tools,
         "You are a helpful assistant with shell, read_file, write_file tools. Complete each step and verify.",
-        &UserContent::Text(format!(
-            "Steps:\n\
+        "Steps:\n\
              1. write_file: create '{test_dir}/hello.txt' with 'Hello from cyber-agent!'\n\
              2. read_file: read it back, confirm content\n\
              3. shell: run 'wc -c {test_dir}/hello.txt'\n\
-             4. Report success/failure"
-        ).into()),
+             4. Report success/failure",
         Some(&cb), None,
     ).await.expect("agent should succeed");
 

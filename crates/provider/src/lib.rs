@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::{anyhow, bail};
 use async_trait::async_trait;
 
-use cyber_agent_model::{
+use cyber_agent_proto::{
     ChatMessage, CompletionResponse, LlmProvider, ToolCall, ToolDef, Usage,
 };
 use cyber_agent_protocol::{
@@ -43,7 +43,7 @@ impl BridgeProvider {
     ) -> BridgeRequest {
         BridgeRequest {
             model: self.model_id.clone(),
-            messages: messages.iter().map(ChatMessage::to_openai_value).collect(),
+            messages: messages.iter().map(|m| serde_json::to_value(m).unwrap_or_default()).collect(),
             tools: tools.iter().map(tool_def_to_request_tool).collect(),
         }
     }
@@ -88,12 +88,10 @@ fn parse_tool_calls(
             if tc.function.name.is_empty() {
                 return None;
             }
-            let arguments = serde_json::from_str(&tc.function.arguments)
-                .unwrap_or(serde_json::json!({}));
             Some(ToolCall {
                 id: tc.id.clone(),
                 name: tc.function.name.clone(),
-                arguments,
+                arguments_json: tc.function.arguments.clone(),
             })
         })
         .collect()
@@ -107,12 +105,12 @@ fn completion_from_payload(payload: BridgeCompletionPayload) -> anyhow::Result<C
         .ok_or_else(|| anyhow!("bridge response missing choices[0].message"))?;
 
     Ok(CompletionResponse {
-        text: message.content.clone(),
+        text: message.content.clone().unwrap_or_default(),
         tool_calls: parse_tool_calls(&message.tool_calls),
-        usage: Usage {
+        usage: Some(Usage {
             input_tokens: payload.usage.prompt_tokens,
             output_tokens: payload.usage.completion_tokens,
-        },
+        }),
     })
 }
 
@@ -231,9 +229,10 @@ mod tests {
         let messages = vec![ChatMessage::user("hi")];
         let result = provider.complete(&messages, &[]).await.unwrap();
 
-        assert_eq!(result.text.as_deref(), Some("hello"));
-        assert_eq!(result.usage.input_tokens, 10);
-        assert_eq!(result.usage.output_tokens, 5);
+        assert_eq!(result.text, "hello");
+        let usage = result.usage.unwrap();
+        assert_eq!(usage.input_tokens, 10);
+        assert_eq!(usage.output_tokens, 5);
         assert!(result.tool_calls.is_empty());
 
         let seen = transport.seen.lock().unwrap();
@@ -265,10 +264,10 @@ mod tests {
             transport,
         );
 
-        let tools = vec![cyber_agent_model::ToolDef {
+        let tools = vec![cyber_agent_proto::ToolDef {
             name: "shell".into(),
             description: "Execute command".into(),
-            params: vec![cyber_agent_model::ToolParam {
+            params: vec![cyber_agent_proto::ToolParam {
                 name: "command".into(),
                 description: "Command to run".into(),
                 r#type: "string".into(),
@@ -282,6 +281,6 @@ mod tests {
 
         assert_eq!(result.tool_calls.len(), 1);
         assert_eq!(result.tool_calls[0].name, "shell");
-        assert_eq!(result.tool_calls[0].arguments["command"], "ls");
+        assert_eq!(result.tool_calls[0].arguments()["command"], "ls");
     }
 }
