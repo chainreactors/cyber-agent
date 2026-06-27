@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+pub use cyber_agent_proto::{ToolDef, ToolParam};
 
 #[derive(Debug, Clone)]
 pub enum ChatMessage {
@@ -179,7 +180,7 @@ pub trait LlmProvider: Send + Sync {
     async fn complete(
         &self,
         messages: &[ChatMessage],
-        tools: &[serde_json::Value],
+        tools: &[ToolDef],
     ) -> anyhow::Result<CompletionResponse>;
 
     fn supports_tools(&self) -> bool {

@@ -4,7 +4,7 @@ use anyhow::{anyhow, bail};
 use async_trait::async_trait;
 
 use cyber_agent_model::{
-    ChatMessage, CompletionResponse, LlmProvider, ToolCall, Usage,
+    ChatMessage, CompletionResponse, LlmProvider, ToolCall, ToolDef, Usage,
 };
 use cyber_agent_protocol::{
     BridgeCompletionPayload, BridgeRequest, BridgeRequestFunction, BridgeRequestTool,
@@ -39,37 +39,44 @@ impl BridgeProvider {
     fn build_request(
         &self,
         messages: &[ChatMessage],
-        tools: &[serde_json::Value],
+        tools: &[ToolDef],
     ) -> BridgeRequest {
         BridgeRequest {
             model: self.model_id.clone(),
             messages: messages.iter().map(ChatMessage::to_openai_value).collect(),
-            tools: to_openai_tools(tools),
+            tools: tools.iter().map(tool_def_to_request_tool).collect(),
         }
     }
 }
 
-fn to_openai_tools(schemas: &[serde_json::Value]) -> Vec<BridgeRequestTool> {
-    schemas
-        .iter()
-        .filter_map(|schema| {
-            let name = schema["name"].as_str()?.to_string();
-            let description = schema["description"].as_str().unwrap_or("").to_string();
-            let parameters = schema
-                .get("parameters")
-                .cloned()
-                .unwrap_or(serde_json::json!({"type": "object"}));
-            Some(BridgeRequestTool {
-                tool_type: "function".to_string(),
-                function: BridgeRequestFunction {
-                    name,
-                    description,
-                    parameters,
-                    strict: false,
-                },
-            })
-        })
-        .collect()
+fn tool_def_to_request_tool(def: &ToolDef) -> BridgeRequestTool {
+    let mut properties = serde_json::Map::new();
+    let mut required = vec![];
+    for p in &def.params {
+        properties.insert(
+            p.name.clone(),
+            serde_json::json!({
+                "type": &p.r#type,
+                "description": &p.description,
+            }),
+        );
+        if p.required {
+            required.push(serde_json::Value::String(p.name.clone()));
+        }
+    }
+    BridgeRequestTool {
+        tool_type: "function".to_string(),
+        function: BridgeRequestFunction {
+            name: def.name.clone(),
+            description: def.description.clone(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": properties,
+                "required": required,
+            }),
+            strict: false,
+        },
+    }
 }
 
 fn parse_tool_calls(
@@ -126,7 +133,7 @@ impl LlmProvider for BridgeProvider {
     async fn complete(
         &self,
         messages: &[ChatMessage],
-        tools: &[serde_json::Value],
+        tools: &[ToolDef],
     ) -> anyhow::Result<CompletionResponse> {
         let request = self.build_request(messages, tools);
         let request_bytes =
@@ -258,11 +265,16 @@ mod tests {
             transport,
         );
 
-        let tools = vec![serde_json::json!({
-            "name": "shell",
-            "description": "Execute command",
-            "parameters": {"type": "object", "properties": {"command": {"type": "string"}}}
-        })];
+        let tools = vec![cyber_agent_model::ToolDef {
+            name: "shell".into(),
+            description: "Execute command".into(),
+            params: vec![cyber_agent_model::ToolParam {
+                name: "command".into(),
+                description: "Command to run".into(),
+                r#type: "string".into(),
+                required: true,
+            }],
+        }];
         let result = provider
             .complete(&[ChatMessage::user("run ls")], &tools)
             .await

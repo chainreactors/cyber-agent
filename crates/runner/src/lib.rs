@@ -258,12 +258,11 @@ pub async fn run_agent_loop(
     on_event: Option<&OnEvent>,
     history: Option<Vec<ChatMessage>>,
 ) -> Result<AgentRunResult, AgentRunError> {
-    let tool_schemas = tools.list_schemas();
     let tool_defs = tools.list_tool_defs();
-    let schemas_for_api = if provider.supports_tools() {
-        &tool_schemas
+    let tools_for_api: &[ToolDef] = if provider.supports_tools() {
+        &tool_defs
     } else {
-        &[][..]
+        &[]
     };
 
     let mut messages: Vec<ChatMessage> = vec![ChatMessage::system(system_prompt)];
@@ -294,7 +293,7 @@ pub async fn run_agent_loop(
             cb(RunnerEvent::Iteration(iterations));
         }
 
-        let response: CompletionResponse = match provider.complete(&messages, schemas_for_api).await
+        let response: CompletionResponse = match provider.complete(&messages, tools_for_api).await
         {
             Ok(r) => r,
             Err(e) => {
@@ -420,7 +419,7 @@ pub async fn run_agent_loop(
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use cyber_agent_model::ToolCall;
+    use cyber_agent_model::{ToolCall, ToolDef};
     use cyber_agent_tool::AgentTool;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -439,7 +438,7 @@ mod tests {
         async fn complete(
             &self,
             _messages: &[ChatMessage],
-            _tools: &[serde_json::Value],
+            _tools: &[ToolDef],
         ) -> anyhow::Result<CompletionResponse> {
             Ok(CompletionResponse {
                 text: Some(self.response_text.clone()),
@@ -470,7 +469,7 @@ mod tests {
         async fn complete(
             &self,
             _messages: &[ChatMessage],
-            _tools: &[serde_json::Value],
+            _tools: &[ToolDef],
         ) -> anyhow::Result<CompletionResponse> {
             let count = self.call_count.fetch_add(1, Ordering::SeqCst);
             if count == 0 {
