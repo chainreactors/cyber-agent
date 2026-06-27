@@ -11,10 +11,11 @@ cyber-agent-transport = { path = "../crates/transport" }
 cyber-agent-protocol = { path = "../crates/protocol" }
 cyber-agent-provider = { path = "../crates/provider" }
 cyber-agent-runner = { path = "../crates/runner" }
+cyber-agent-worker = { path = "../crates/worker" }
 async-trait = { workspace = true }
 anyhow = { workspace = true }
 serde_json = { workspace = true }
-tokio = { version = "1", features = ["rt", "macros"] }
+tokio = { version = "1", features = ["rt", "macros", "sync"] }
 ureq = "2"
 
 [[test]]
@@ -32,3 +33,7 @@ path = "e2e_local_server.rs"
 [[test]]
 name = "e2e_real_agent"
 path = "e2e_real_agent.rs"
+
+[[test]]
+name = "worker_test"
+path = "worker_test.rs"
