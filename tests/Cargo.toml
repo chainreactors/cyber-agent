@@ -10,6 +10,7 @@ cyber-agent-tool = { path = "../crates/tool" }
 cyber-agent-provider = { path = "../crates/provider" }
 cyber-agent-runner = { path = "../crates/runner" }
 cyber-agent-worker = { path = "../crates/worker" }
+cyber-agent-server = { path = "../crates/server" }
 async-trait = { workspace = true }
 anyhow = { workspace = true }
 serde_json = { workspace = true }
@@ -35,3 +36,7 @@ path = "e2e_real_agent.rs"
 [[test]]
 name = "worker_test"
 path = "worker_test.rs"
+
+[[test]]
+name = "server_test"
+path = "server_test.rs"

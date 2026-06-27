@@ -12,9 +12,9 @@ use anyhow::Result;
 use async_trait::async_trait;
 use tokio::sync::mpsc;
 
-use cyber_agent_proto::{ToolCallRequest, ToolCallResult, ToolManifest};
+use cyber_agent_proto::{ToolCallRequest, ToolCallResult, ToolManifest, Transport};
 use cyber_agent_tool::{AgentTool, ToolRegistry};
-use cyber_agent_worker::{WorkerTransport, run_worker_loop_bidi};
+use cyber_agent_worker::run_worker;
 
 // ── Channel-based transport ─────────────────────────────────────────────
 
@@ -24,7 +24,7 @@ struct ChannelTransport {
 }
 
 #[async_trait]
-impl WorkerTransport for ChannelTransport {
+impl Transport for ChannelTransport {
     async fn send(&self, data: &[u8]) -> Result<()> {
         self.tx.send(data.to_vec()).await.map_err(|e| anyhow::anyhow!("{}", e))
     }
@@ -112,7 +112,7 @@ async fn reverse_mode_multi_tool() {
 
     // Spawn the agent worker
     let agent_handle = tokio::spawn(async move {
-        run_worker_loop_bidi(agent_transport.as_ref(), &tools, "test-session").await
+        run_worker(agent_transport.as_ref(), &tools, "test-session").await
     });
 
     // Server side: simulate ReAct loop
@@ -199,7 +199,7 @@ async fn reverse_mode_unknown_tool() {
     let tools = ToolRegistry::new(); // empty — no tools
 
     let agent_handle = tokio::spawn(async move {
-        run_worker_loop_bidi(agent_transport.as_ref(), &tools, "s1").await
+        run_worker(agent_transport.as_ref(), &tools, "s1").await
     });
 
     let server_handle = tokio::spawn(async move {

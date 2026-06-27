@@ -1,39 +1,30 @@
-//! gRPC server for the reverse-mode agent protocol.
+//! Server-side agent session driver.
 //!
-//! The server drives the ReAct loop (calls LLM, decides actions).
-//! When it needs a tool executed, it sends a ToolCallRequest to the
-//! connected agent worker via gRPC bidirectional streaming.
+//! Transport-agnostic: works over any `Transport` implementation
+//! (TCP, WebSocket, gRPC, channels, C2, etc.)
 //!
 //! Usage:
 //!   1. Implement `AgentHandler` to provide your ReAct logic
-//!   2. Call `serve(addr, handler)` to start the gRPC server
-//!   3. Agent workers connect via `AgentService::Session` RPC
+//!   2. Accept a connection, wrap it as `dyn Transport`
+//!   3. Call `serve_session(transport, handler)` to drive the session
 
-use std::pin::Pin;
-use std::sync::Arc;
+#[cfg(feature = "grpc")]
+pub mod grpc;
 
-use tokio::sync::mpsc;
-use tokio_stream::{wrappers::ReceiverStream, StreamExt};
-use tonic::{Request, Response, Status, Streaming};
+use anyhow::{anyhow, Result};
 
 use cyber_agent_proto::{
-    AgentMessage, AgentService, AgentServiceServer, ServerMessage,
-    ToolCallRequest, ToolCallResult, ToolManifest,
-    agent_message::Payload,
+    ToolCallRequest, ToolCallResult, ToolManifest, Transport,
 };
 
 /// Implement this trait to provide the server-side ReAct logic.
-///
-/// The handler receives the tool manifest from the agent, then
-/// drives the conversation by calling `call_tool` on the provided
-/// `ToolExecutor` as many times as needed.
 #[async_trait::async_trait]
-pub trait AgentHandler: Send + Sync + 'static {
+pub trait AgentHandler: Send + Sync {
     async fn handle_session(
         &self,
         manifest: ToolManifest,
-        executor: Box<dyn ToolExecutor>,
-    ) -> Result<String, Status>;
+        executor: &dyn ToolExecutor,
+    ) -> Result<String>;
 }
 
 /// Interface for calling tools on the remote agent.
@@ -44,22 +35,22 @@ pub trait ToolExecutor: Send + Sync {
         id: &str,
         name: &str,
         arguments_json: &str,
-    ) -> Result<ToolCallResult, Status>;
+    ) -> Result<ToolCallResult>;
 }
 
-struct GrpcToolExecutor {
-    tx: mpsc::Sender<ServerMessage>,
-    result_rx: tokio::sync::Mutex<mpsc::Receiver<ToolCallResult>>,
+/// Transport-backed tool executor — sends ToolCallRequest, waits for ToolCallResult.
+pub(crate) struct TransportExecutor<'a> {
+    pub(crate) transport: &'a dyn Transport,
 }
 
 #[async_trait::async_trait]
-impl ToolExecutor for GrpcToolExecutor {
+impl ToolExecutor for TransportExecutor<'_> {
     async fn call_tool(
         &self,
         id: &str,
         name: &str,
         arguments_json: &str,
-    ) -> Result<ToolCallResult, Status> {
+    ) -> Result<ToolCallResult> {
         let req = ToolCallRequest {
             id: id.into(),
             name: name.into(),
@@ -67,99 +58,42 @@ impl ToolExecutor for GrpcToolExecutor {
             done: false,
             final_text: String::new(),
         };
-        self.tx
-            .send(ServerMessage { request: Some(req) })
-            .await
-            .map_err(|_| Status::internal("agent disconnected"))?;
+        self.transport
+            .send(&serde_json::to_vec(&req)?)
+            .await?;
 
-        self.result_rx
-            .lock()
-            .await
-            .recv()
-            .await
-            .ok_or_else(|| Status::internal("agent closed stream"))
+        let result_bytes = self.transport.recv().await?;
+        serde_json::from_slice(&result_bytes)
+            .map_err(|e| anyhow!("parse ToolCallResult: {}", e))
     }
 }
 
-struct AgentServiceImpl {
-    handler: Arc<dyn AgentHandler>,
-}
+/// Drive a single agent session over any Transport.
+///
+/// 1. Receives ToolManifest from the agent
+/// 2. Calls handler.handle_session() — handler uses executor to call tools
+/// 3. Sends done signal to the agent
+pub async fn serve_session(
+    transport: &dyn Transport,
+    handler: &dyn AgentHandler,
+) -> Result<String> {
+    let manifest_bytes = transport.recv().await?;
+    let manifest: ToolManifest = serde_json::from_slice(&manifest_bytes)
+        .map_err(|e| anyhow!("parse ToolManifest: {}", e))?;
 
-#[tonic::async_trait]
-impl AgentService for AgentServiceImpl {
-    type SessionStream =
-        Pin<Box<dyn futures_core::Stream<Item = Result<ServerMessage, Status>> + Send>>;
+    let executor = TransportExecutor { transport };
 
-    async fn session(
-        &self,
-        request: Request<Streaming<AgentMessage>>,
-    ) -> Result<Response<Self::SessionStream>, Status> {
-        let mut inbound = request.into_inner();
+    let final_text = match handler.handle_session(manifest, &executor).await {
+        Ok(text) => text,
+        Err(e) => format!("handler error: {}", e),
+    };
 
-        // Wait for the first message: must be a ToolManifest
-        let manifest = match inbound.next().await {
-            Some(Ok(msg)) => match msg.payload {
-                Some(Payload::Manifest(m)) => m,
-                _ => return Err(Status::invalid_argument("first message must be ToolManifest")),
-            },
-            Some(Err(e)) => return Err(e),
-            None => return Err(Status::cancelled("stream closed before manifest")),
-        };
+    let done = ToolCallRequest {
+        done: true,
+        final_text: final_text.clone(),
+        ..Default::default()
+    };
+    transport.send(&serde_json::to_vec(&done)?).await?;
 
-        // Channels for server → agent (tool call requests)
-        let (server_tx, server_rx) = mpsc::channel::<ServerMessage>(32);
-        // Channel for agent → server (tool call results, forwarded from inbound stream)
-        let (result_tx, result_rx) = mpsc::channel::<ToolCallResult>(32);
-
-        // Forward inbound tool results to the result channel
-        tokio::spawn(async move {
-            while let Some(Ok(msg)) = inbound.next().await {
-                if let Some(Payload::Result(result)) = msg.payload {
-                    if result_tx.send(result).await.is_err() {
-                        break;
-                    }
-                }
-            }
-        });
-
-        let executor = Box::new(GrpcToolExecutor {
-            tx: server_tx.clone(),
-            result_rx: tokio::sync::Mutex::new(result_rx),
-        });
-
-        // Run the handler in a background task
-        let handler = self.handler.clone();
-        tokio::spawn(async move {
-            let final_text = match handler.handle_session(manifest, executor).await {
-                Ok(text) => text,
-                Err(e) => format!("handler error: {}", e),
-            };
-
-            // Send done signal
-            let _ = server_tx
-                .send(ServerMessage {
-                    request: Some(ToolCallRequest {
-                        done: true,
-                        final_text,
-                        ..Default::default()
-                    }),
-                })
-                .await;
-        });
-
-        let output_stream = ReceiverStream::new(server_rx).map(Ok);
-        Ok(Response::new(Box::pin(output_stream)))
-    }
-}
-
-/// Start the gRPC server.
-pub async fn serve(
-    addr: std::net::SocketAddr,
-    handler: Arc<dyn AgentHandler>,
-) -> Result<(), tonic::transport::Error> {
-    let service = AgentServiceImpl { handler };
-    tonic::transport::Server::builder()
-        .add_service(AgentServiceServer::new(service))
-        .serve(addr)
-        .await
+    Ok(final_text)
 }
