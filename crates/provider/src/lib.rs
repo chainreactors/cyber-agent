@@ -44,8 +44,47 @@ impl BridgeProvider {
     ) -> BridgeRequest {
         BridgeRequest {
             model: self.model_id.clone(),
-            messages: messages.iter().map(|m| serde_json::to_value(m).unwrap_or_default()).collect(),
+            messages: messages.iter().map(chat_message_to_openai).collect(),
             tools: tools.iter().map(tool_def_to_request_tool).collect(),
+        }
+    }
+}
+
+fn chat_message_to_openai(msg: &ChatMessage) -> serde_json::Value {
+    let role = &msg.role;
+    match role.as_str() {
+        "assistant" if !msg.tool_calls.is_empty() => {
+            let tc_json: Vec<serde_json::Value> = msg.tool_calls.iter().map(|tc| {
+                serde_json::json!({
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {
+                        "name": tc.name,
+                        "arguments": tc.arguments_json,
+                    }
+                })
+            }).collect();
+            let mut val = serde_json::json!({
+                "role": "assistant",
+                "tool_calls": tc_json,
+            });
+            if !msg.content.is_empty() {
+                val["content"] = serde_json::Value::String(msg.content.clone());
+            }
+            val
+        }
+        "tool" => {
+            serde_json::json!({
+                "role": "tool",
+                "tool_call_id": msg.tool_call_id,
+                "content": msg.content,
+            })
+        }
+        _ => {
+            serde_json::json!({
+                "role": role,
+                "content": msg.content,
+            })
         }
     }
 }
