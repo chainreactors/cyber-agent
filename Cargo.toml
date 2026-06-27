@@ -1,0 +1,21 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/model",
+    "crates/tool",
+    "crates/transport",
+    "crates/protocol",
+    "crates/provider",
+    "crates/runner",
+    "crates/proto",
+    "tests",
+]
+
+[workspace.dependencies]
+async-trait = "0.1"
+anyhow = "1"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+futures = "0.3"
+futures-timer = "3"
