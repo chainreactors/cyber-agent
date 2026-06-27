@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use cyber_agent_proto::{ToolDef, ToolParam};
+use cyber_agent_proto::{ToolCallResult, ToolDef, ToolParam};
 
 #[async_trait]
 pub trait AgentTool: Send + Sync {
@@ -61,6 +61,35 @@ impl ToolRegistry {
 
     pub fn list_names(&self) -> Vec<String> {
         self.tools.keys().cloned().collect()
+    }
+
+    pub async fn execute_call(&self, id: &str, name: &str, arguments_json: &str) -> ToolCallResult {
+        match self.get(name) {
+            Some(tool) => {
+                let args: serde_json::Value =
+                    serde_json::from_str(arguments_json).unwrap_or(serde_json::json!({}));
+                match tool.execute(args).await {
+                    Ok(val) => ToolCallResult {
+                        id: id.into(),
+                        success: true,
+                        result_json: serde_json::to_string(&val).unwrap_or_default(),
+                        error: String::new(),
+                    },
+                    Err(e) => ToolCallResult {
+                        id: id.into(),
+                        success: false,
+                        result_json: String::new(),
+                        error: e.to_string(),
+                    },
+                }
+            }
+            None => ToolCallResult {
+                id: id.into(),
+                success: false,
+                result_json: String::new(),
+                error: format!("unknown tool: {}", name),
+            },
+        }
     }
 }
 

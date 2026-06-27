@@ -344,69 +344,28 @@ pub async fn run_agent_loop(
             }
         }
 
-        let tool_futures: Vec<_> = response
+        let call_futures: Vec<_> = response
             .tool_calls
             .iter()
-            .map(|tc| {
-                let tool = tools.get(&tc.name);
-                let args = tc.arguments();
-                let tc_name = tc.name.clone();
-                async move {
-                    if let Some(tool) = tool {
-                        match tool.execute(args).await {
-                            Ok(val) => {
-                                let has_error = val.get("error").is_some()
-                                    || val.get("success")
-                                        == Some(&serde_json::json!(false));
-                                let error_msg = if has_error {
-                                    val.get("error")
-                                        .and_then(|e| e.as_str())
-                                        .map(String::from)
-                                } else {
-                                    None
-                                };
-                                (
-                                    !has_error,
-                                    serde_json::json!({ "result": val }),
-                                    error_msg,
-                                )
-                            }
-                            Err(e) => {
-                                let err_str = e.to_string();
-                                (
-                                    false,
-                                    serde_json::json!({ "error": err_str }),
-                                    Some(err_str),
-                                )
-                            }
-                        }
-                    } else {
-                        let err_str = format!("unknown tool: {tc_name}");
-                        (
-                            false,
-                            serde_json::json!({ "error": err_str }),
-                            Some(err_str),
-                        )
-                    }
-                }
-            })
+            .map(|tc| tools.execute_call(&tc.id, &tc.name, &tc.arguments_json))
             .collect();
 
-        let results = futures::future::join_all(tool_futures).await;
+        let results = futures::future::join_all(call_futures).await;
 
-        for (tc, (success, result, error)) in response.tool_calls.iter().zip(results) {
+        for result in &results {
             if let Some(cb) = on_event {
+                let error = if result.success { None } else { Some(result.error.clone()) };
                 cb(RunnerEvent::ToolCallEnd {
-                    id: tc.id.clone(),
-                    name: tc.name.clone(),
-                    success,
+                    id: result.id.clone(),
+                    name: response.tool_calls.iter().find(|tc| tc.id == result.id).map(|tc| tc.name.clone()).unwrap_or_default(),
+                    success: result.success,
                     error,
                 });
             }
 
-            let tool_result_str =
-                sanitize_tool_result(&result.to_string(), MAX_TOOL_RESULT_BYTES);
-            messages.push(ChatMessage::tool(&tc.id, &tool_result_str));
+            let content = if result.success { &result.result_json } else { &result.error };
+            let tool_result_str = sanitize_tool_result(content, MAX_TOOL_RESULT_BYTES);
+            messages.push(ChatMessage::tool(&result.id, &tool_result_str));
         }
     }
 }

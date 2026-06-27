@@ -87,9 +87,8 @@ impl Transport for SimulatedLlmBackend {
                 assert_eq!(last_msg["role"], "tool", "expected tool result message");
                 let tool_output = last_msg["content"].as_str().unwrap_or("");
                 assert!(
-                    tool_output.contains("result"),
-                    "expected tool result in message, got: {}",
-                    tool_output
+                    !tool_output.is_empty(),
+                    "expected non-empty tool result, got empty"
                 );
 
                 BridgeResponse {

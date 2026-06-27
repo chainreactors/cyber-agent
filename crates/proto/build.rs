@@ -6,9 +6,11 @@ fn main() {
     config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
     config.field_attribute(".agentpb", "#[serde(default)]");
 
+    let grpc = std::env::var("CARGO_FEATURE_GRPC").is_ok();
+
     tonic_build::configure()
-        .build_server(true)
-        .build_client(true)
+        .build_server(grpc)
+        .build_client(grpc)
         .compile_protos_with_config(config, &[PROTO_FILE], &[PROTO_INCLUDE])
         .expect("failed to compile agent.proto");
 

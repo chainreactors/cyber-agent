@@ -4,7 +4,7 @@ use anyhow::Result;
 use tokio_stream::StreamExt;
 
 use cyber_agent_proto::{
-    AgentMessage, AgentServiceClient, ToolCallResult, ToolManifest,
+    AgentMessage, AgentServiceClient, ToolManifest,
     agent_message::Payload,
 };
 use cyber_agent_tool::ToolRegistry;
@@ -50,33 +50,7 @@ pub async fn run_grpc_worker(
             });
         }
 
-        // Execute the tool
-        let result = match tools.get(&req.name) {
-            Some(tool) => {
-                let args: serde_json::Value =
-                    serde_json::from_str(&req.arguments_json).unwrap_or(serde_json::json!({}));
-                match tool.execute(args).await {
-                    Ok(val) => ToolCallResult {
-                        id: req.id.clone(),
-                        success: true,
-                        result_json: serde_json::to_string(&val).unwrap_or_default(),
-                        error: String::new(),
-                    },
-                    Err(e) => ToolCallResult {
-                        id: req.id.clone(),
-                        success: false,
-                        result_json: String::new(),
-                        error: e.to_string(),
-                    },
-                }
-            }
-            None => ToolCallResult {
-                id: req.id.clone(),
-                success: false,
-                result_json: String::new(),
-                error: format!("unknown tool: {}", req.name),
-            },
-        };
+        let result = tools.execute_call(&req.id, &req.name, &req.arguments_json).await;
 
         tool_calls_executed += 1;
 
