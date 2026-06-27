@@ -3,8 +3,13 @@ name = "cyber-agent-proto"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = []
+grpc = ["dep:tonic"]
+
 [dependencies]
 prost = "0.13"
+tonic = { version = "0.12", optional = true }
 async-trait = { workspace = true }
 anyhow = { workspace = true }
 serde = { workspace = true }
@@ -12,3 +17,4 @@ serde_json = { workspace = true }
 
 [build-dependencies]
 prost-build = "0.13"
+tonic-build = "0.12"

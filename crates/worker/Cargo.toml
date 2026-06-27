@@ -3,6 +3,10 @@ name = "cyber-agent-worker"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = []
+grpc = ["cyber-agent-proto/grpc", "dep:tonic", "dep:tokio", "dep:tokio-stream"]
+
 [dependencies]
 cyber-agent-proto = { path = "../proto" }
 cyber-agent-tool = { path = "../tool" }
@@ -10,3 +14,6 @@ cyber-agent-transport = { path = "../transport" }
 async-trait = { workspace = true }
 anyhow = { workspace = true }
 serde_json = { workspace = true }
+tonic = { version = "0.12", optional = true }
+tokio = { version = "1", features = ["sync"], optional = true }
+tokio-stream = { version = "0.1", optional = true }

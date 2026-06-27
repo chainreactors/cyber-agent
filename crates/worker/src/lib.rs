@@ -10,6 +10,9 @@
 //! The server can be written in any language — it controls the LLM,
 //! reasoning, and action selection. The agent is a pure tool executor.
 
+#[cfg(feature = "grpc")]
+pub mod grpc;
+
 use anyhow::{anyhow, Result};
 
 use cyber_agent_proto::{ToolCallRequest, ToolCallResult, ToolManifest};

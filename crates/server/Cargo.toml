@@ -1,0 +1,13 @@
+[package]
+name = "cyber-agent-server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cyber-agent-proto = { path = "../proto", features = ["grpc"] }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+tokio = { version = "1", features = ["rt", "sync", "macros"] }
+tokio-stream = "0.1"
+tonic = "0.12"
+futures-core = "0.3"

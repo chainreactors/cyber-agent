@@ -7,6 +7,7 @@ members = [
     "crates/provider",
     "crates/runner",
     "crates/worker",
+    "crates/server",
     "crates/proto",
     "tests",
 ]

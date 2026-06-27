@@ -6,8 +6,10 @@ fn main() {
     config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
     config.field_attribute(".agentpb", "#[serde(default)]");
 
-    config
-        .compile_protos(&[PROTO_FILE], &[PROTO_INCLUDE])
+    tonic_build::configure()
+        .build_server(true)
+        .build_client(true)
+        .compile_protos_with_config(config, &[PROTO_FILE], &[PROTO_INCLUDE])
         .expect("failed to compile agent.proto");
 
     fix_serde_enum_variants();
