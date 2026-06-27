@@ -19,7 +19,7 @@ use cyber_agent_proto::LlmProvider;
 use cyber_agent_provider::BridgeProvider;
 use cyber_agent_runner::{run_agent_loop, RunnerEvent};
 use cyber_agent_tool::{AgentTool, ToolRegistry};
-use cyber_agent_transport::Transport;
+use cyber_agent_proto::Transport;
 
 // ── HTTP Transport (same as what a real deployment would use) ────────────
 

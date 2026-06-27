@@ -17,7 +17,7 @@ use anyhow::{anyhow, Result};
 
 use cyber_agent_proto::{ToolCallRequest, ToolManifest};
 use cyber_agent_tool::ToolRegistry;
-use cyber_agent_transport::Transport;
+use cyber_agent_proto::Transport;
 
 pub struct WorkerResult {
     pub final_text: String,

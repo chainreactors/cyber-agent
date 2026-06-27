@@ -5,14 +5,14 @@ use anyhow::Result;
 use async_trait::async_trait;
 
 use cyber_agent_proto::LlmProvider;
-use cyber_agent_protocol::{
+use cyber_agent_provider::wire::{
     BridgeAssistantMessage, BridgeChoice, BridgeCompletionPayload, BridgeRequest, BridgeResponse,
     BridgeResponsePayload, BridgeToolCall, BridgeToolCallFunction, BridgeUsage,
 };
 use cyber_agent_provider::BridgeProvider;
 use cyber_agent_runner::{run_agent_loop, RunnerEvent};
 use cyber_agent_tool::{AgentTool, ToolRegistry};
-use cyber_agent_transport::Transport;
+use cyber_agent_proto::Transport;
 
 // ── Simulated LLM Backend ───────────────────────────────────────────────
 // This simulates what happens on the server side: receives a BridgeRequest,
@@ -535,7 +535,7 @@ async fn history_is_forwarded() {
 /// Test: protocol serialization round-trip
 #[test]
 fn protocol_serde_round_trip() {
-    use cyber_agent_protocol::*;
+    use cyber_agent_provider::wire::*;
 
     // Build a request with tools
     let request = BridgeRequest {

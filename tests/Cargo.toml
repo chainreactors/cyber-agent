@@ -7,8 +7,6 @@ publish = false
 [dependencies]
 cyber-agent-proto = { path = "../crates/proto" }
 cyber-agent-tool = { path = "../crates/tool" }
-cyber-agent-transport = { path = "../crates/transport" }
-cyber-agent-protocol = { path = "../crates/protocol" }
 cyber-agent-provider = { path = "../crates/provider" }
 cyber-agent-runner = { path = "../crates/runner" }
 cyber-agent-worker = { path = "../crates/worker" }

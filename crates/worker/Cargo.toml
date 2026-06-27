@@ -10,7 +10,6 @@ grpc = ["cyber-agent-proto/grpc", "dep:tonic", "dep:tokio", "dep:tokio-stream"]
 [dependencies]
 cyber-agent-proto = { path = "../proto" }
 cyber-agent-tool = { path = "../tool" }
-cyber-agent-transport = { path = "../transport" }
 async-trait = { workspace = true }
 anyhow = { workspace = true }
 serde_json = { workspace = true }

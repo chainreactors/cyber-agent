@@ -3,14 +3,15 @@ use std::sync::Arc;
 use anyhow::{anyhow, bail};
 use async_trait::async_trait;
 
+pub mod wire;
+
 use cyber_agent_proto::{
-    ChatMessage, CompletionResponse, LlmProvider, ToolCall, ToolDef, Usage,
+    ChatMessage, CompletionResponse, LlmProvider, ToolCall, ToolDef, Transport, Usage,
 };
-use cyber_agent_protocol::{
+use wire::{
     BridgeCompletionPayload, BridgeRequest, BridgeRequestFunction, BridgeRequestTool,
     BridgeResponse, BridgeResponsePayload,
 };
-use cyber_agent_transport::Transport;
 
 #[derive(Clone)]
 pub struct BridgeProvider {
@@ -80,7 +81,7 @@ fn tool_def_to_request_tool(def: &ToolDef) -> BridgeRequestTool {
 }
 
 fn parse_tool_calls(
-    tool_calls: &[cyber_agent_protocol::BridgeToolCall],
+    tool_calls: &[wire::BridgeToolCall],
 ) -> Vec<ToolCall> {
     tool_calls
         .iter()
@@ -158,7 +159,7 @@ impl LlmProvider for BridgeProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cyber_agent_protocol::{
+    use wire::{
         BridgeAssistantMessage, BridgeChoice, BridgeCompletionPayload, BridgeResponse,
         BridgeResponsePayload, BridgeToolCall, BridgeToolCallFunction, BridgeUsage,
     };

@@ -11,4 +11,6 @@ pub use agentpb::agent_service_server::{AgentService, AgentServiceServer};
 
 mod message;
 mod provider;
+mod transport;
 pub use provider::LlmProvider;
+pub use transport::Transport;
